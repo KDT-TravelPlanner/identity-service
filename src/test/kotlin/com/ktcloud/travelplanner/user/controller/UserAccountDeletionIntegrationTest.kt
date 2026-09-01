@@ -200,6 +200,6 @@ class UserAccountDeletionIntegrationTest(
 
 	companion object {
 		private const val REQUEST_ID_HEADER = "X-Request-Id"
-		private const val REQUEST_ID = "018f1ed0-dead-beef-acde-0242ac120002"
+		private const val REQUEST_ID = "018f1ed0-dead-4eef-acde-0242ac120002"
 	}
 }
