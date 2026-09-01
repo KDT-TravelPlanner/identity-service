@@ -41,7 +41,7 @@ class LoggingProfileIntegrationTest {
 	@Test
 	@Order(1)
 	fun `dev profile writes readable stdout and ECS JSON rolling file`(capturedOutput: CapturedOutput) {
-		val logFile = Files.createTempDirectory("travel-planner-dev-log").resolve("travel-planner.log")
+		val logFile = Files.createTempDirectory("identity-service-dev-log").resolve("identity-service.log")
 
 		val loggingProperties = runLoggingProbe("dev", logFile, DEV_MARKER)
 
@@ -53,7 +53,7 @@ class LoggingProfileIntegrationTest {
 
 		assertEquals(DEV_MARKER, fileJson.path("message").asText())
 		assertEquals(
-			"travel-planner-backend",
+			"identity-service",
 			fileJson.path("service").path("name").asText(),
 			fileJson.toPrettyString(),
 		)
@@ -65,7 +65,7 @@ class LoggingProfileIntegrationTest {
 	@Test
 	@Order(2)
 	fun `prod profile writes ECS JSON rolling file without application stdout`(capturedOutput: CapturedOutput) {
-		val logFile = Files.createTempDirectory("travel-planner-prod-log").resolve("travel-planner.log")
+		val logFile = Files.createTempDirectory("identity-service-prod-log").resolve("identity-service.log")
 
 		val loggingProperties = runLoggingProbe("prod", logFile, PROD_MARKER)
 
@@ -77,7 +77,7 @@ class LoggingProfileIntegrationTest {
 		assertEquals("5", loggingProperties.errorFrameLimit)
 		assertEquals(PROD_MARKER, fileJson.path("message").asText())
 		assertEquals(
-			"travel-planner-backend",
+			"identity-service",
 			fileJson.path("service").path("name").asText(),
 			fileJson.toPrettyString(),
 		)
@@ -116,7 +116,7 @@ class LoggingProfileIntegrationTest {
 			.web(WebApplicationType.NONE)
 			.registerShutdownHook(false)
 			.run(
-				"--spring.application.name=travel-planner-backend",
+				"--spring.application.name=identity-service",
 				"--spring.main.banner-mode=off",
 				"--spring.profiles.active=$profile",
 				"--logging.file.name=$logFile",
@@ -130,7 +130,7 @@ class LoggingProfileIntegrationTest {
 				RequestCompletedLog(
 					requestId = REQUEST_ID,
 					method = "GET",
-					route = "/api/travels/{travelId}",
+					route = "/api/v1/users/{userId}/summary",
 					status = 200,
 					durationMs = 12,
 					outcome = LogOutcome.SUCCESS,
@@ -177,7 +177,7 @@ class LoggingProfileIntegrationTest {
 		assertEquals("HTTP_REQUEST_COMPLETED", requestJson.path("event").asText())
 		assertEquals(REQUEST_ID, requestJson.path("requestId").asText())
 		assertEquals("GET", requestJson.path("method").asText())
-		assertEquals("/api/travels/{travelId}", requestJson.path("route").asText())
+		assertEquals("/api/v1/users/{userId}/summary", requestJson.path("route").asText())
 		assertTrue(requestJson.path("status").isIntegralNumber)
 		assertEquals(200, requestJson.path("status").intValue())
 		assertTrue(requestJson.path("durationMs").isIntegralNumber)
@@ -228,7 +228,7 @@ class LoggingProfileIntegrationTest {
 		private const val REQUEST_ID = "2b8e2730-8539-4c06-856d-abe49103a9c5"
 		private const val ERROR_FINGERPRINT =
 			"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-		private const val ERROR_FRAME = "com.ktcloud.travelplanner.travel.service.TravelService#load"
+		private const val ERROR_FRAME = "com.ktcloud.travelplanner.user.service.UserSummaryService#getById"
 		private const val FORBIDDEN_MDC_KEY = "unexpectedMdcField"
 		private const val FORBIDDEN_MDC_VALUE = "mdc-secret-sentinel"
 		private val EXPECTED_REQUEST_LOG_LEAF_PATHS = setOf(

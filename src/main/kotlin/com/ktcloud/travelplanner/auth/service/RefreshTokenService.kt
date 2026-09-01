@@ -74,6 +74,10 @@ class RefreshTokenService(
 		}
 	}
 
+	fun revokeAll(userId: UUID) {
+		tokenStore.revokeAllByUserId(userId)
+	}
+
 	private fun isValidFormat(refreshToken: String?): Boolean =
 		refreshToken != null && REFRESH_TOKEN_PATTERN.matches(refreshToken)
 

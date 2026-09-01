@@ -64,8 +64,7 @@ class RequestLoggingFilterTest {
 		assertDecision(401, ErrorCode.UNAUTHORIZED, RequestLogLevel.WARN, LogOutcome.DENIED)
 		assertDecision(403, ErrorCode.ACCESS_DENIED, RequestLogLevel.WARN, LogOutcome.DENIED)
 		assertDecision(429, null, RequestLogLevel.WARN, LogOutcome.FAILURE)
-		assertDecision(503, ErrorCode.GOOGLE_PLACES_QUOTA_EXCEEDED, RequestLogLevel.WARN, LogOutcome.FAILURE)
-		assertDecision(504, ErrorCode.GOOGLE_ROUTES_TIMEOUT, RequestLogLevel.WARN, LogOutcome.FAILURE)
+		assertDecision(503, ErrorCode.TRAVEL_SERVICE_UNAVAILABLE, RequestLogLevel.WARN, LogOutcome.FAILURE)
 		assertDecision(418, null, RequestLogLevel.WARN, LogOutcome.FAILURE)
 		assertDecision(502, ErrorCode.OAUTH_PROVIDER_ERROR, RequestLogLevel.ERROR, LogOutcome.FAILURE)
 		assertDecision(500, ErrorCode.INTERNAL_SERVER_ERROR, RequestLogLevel.ERROR, LogOutcome.FAILURE)
@@ -171,11 +170,11 @@ class RequestLoggingFilterTest {
 		assertEquals("HTTP_REQUEST_COMPLETED", logEvent.formattedMessage)
 		assertEquals("HTTP_REQUEST_COMPLETED", keyValues["event"])
 		assertEquals("POST", keyValues["method"])
-		assertEquals("/api/travels/{travelId}", keyValues["route"])
+		assertEquals("/api/v1/users/{userId}/summary", keyValues["route"])
 		assertTrue(keyValues["status"] is Int)
 		assertTrue(keyValues["durationMs"] is Long)
 		assertFalse(loggedValues.contains(CLIENT_REQUEST_ID))
-		assertFalse(loggedValues.contains(RAW_TRAVEL_ID))
+		assertFalse(loggedValues.contains(RAW_USER_ID))
 		assertFalse(loggedValues.contains("oauth-secret"))
 		assertFalse(loggedValues.contains("jwt-secret"))
 		assertFalse(loggedValues.contains("cookie-secret"))
@@ -188,8 +187,8 @@ class RequestLoggingFilterTest {
 		val handlerMethod = testHandlerMethod()
 
 		request.setAttribute(HandlerMapping.BEST_MATCHING_HANDLER_ATTRIBUTE, handlerMethod)
-		request.setAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE, "/api/travels/{travelId}")
-		assertEquals("/api/travels/{travelId}", RequestRouteResolver.resolveRoute(request))
+		request.setAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE, "/api/v1/users/{userId}/summary")
+		assertEquals("/api/v1/users/{userId}/summary", RequestRouteResolver.resolveRoute(request))
 
 		request.setAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE, "   ")
 		assertEquals(RequestRouteResolver.UNRESOLVED_ROUTE, RequestRouteResolver.resolveRoute(request))
@@ -204,7 +203,7 @@ class RequestLoggingFilterTest {
 		request.setAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE, "/${"a".repeat(256)}")
 		assertEquals(RequestRouteResolver.UNRESOLVED_ROUTE, RequestRouteResolver.resolveRoute(request))
 
-		request.setAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE, "/api/travels/{travelId}")
+		request.setAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE, "/api/v1/users/{userId}/summary")
 		request.setAttribute(HandlerMapping.BEST_MATCHING_HANDLER_ATTRIBUTE, Any())
 		assertEquals(RequestRouteResolver.UNRESOLVED_ROUTE, RequestRouteResolver.resolveRoute(request))
 
@@ -272,14 +271,14 @@ class RequestLoggingFilterTest {
 	}
 
 	private fun createSensitiveRequest(): MockHttpServletRequest =
-		MockHttpServletRequest("POST", "/api/travels/$RAW_TRAVEL_ID").apply {
+		MockHttpServletRequest("POST", "/api/v1/users/$RAW_USER_ID/summary").apply {
 			addHeader(RequestIdGenerator.HEADER_NAME, CLIENT_REQUEST_ID)
 			addHeader(HttpHeaders.AUTHORIZATION, "Bearer jwt-secret")
 			addHeader(HttpHeaders.COOKIE, "refreshToken=cookie-secret")
 			queryString = "code=oauth-secret&state=state-secret"
 			setContent("{\"password\":\"password-secret\"}".toByteArray())
 			setAttribute(HandlerMapping.BEST_MATCHING_HANDLER_ATTRIBUTE, testHandlerMethod())
-			setAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE, "/api/travels/{travelId}")
+			setAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE, "/api/v1/users/{userId}/summary")
 		}
 
 	private fun testHandlerMethod(): HandlerMethod = HandlerMethod(
@@ -296,6 +295,6 @@ class RequestLoggingFilterTest {
 
 	companion object {
 		private const val CLIENT_REQUEST_ID = "client-request-id-sentinel"
-		private const val RAW_TRAVEL_ID = "018f1ed0-dead-beef-acde-0242ac120002"
+		private const val RAW_USER_ID = "018f1ed0-dead-beef-acde-0242ac120002"
 	}
 }

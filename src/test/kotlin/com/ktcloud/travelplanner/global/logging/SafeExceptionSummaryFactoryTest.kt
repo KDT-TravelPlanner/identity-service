@@ -12,9 +12,9 @@ class SafeExceptionSummaryFactoryTest {
 		val rootCause = IllegalArgumentException("token=secret-token url=https://private.example/path")
 		rootCause.stackTrace = arrayOf(
 			StackTraceElement(
-				"com.ktcloud.travelplanner.travel.service.TravelService",
-				"getTravel",
-				"TravelService.kt",
+				"com.ktcloud.travelplanner.user.service.UserSummaryService",
+				"getById",
+				"UserSummaryService.kt",
 				77,
 			),
 			StackTraceElement("java.net.URI", "create", "URI.java", 99),
@@ -26,14 +26,14 @@ class SafeExceptionSummaryFactoryTest {
 
 		assertEquals(IllegalArgumentException::class.java.name, summary.errorType)
 		assertEquals(
-			listOf("com.ktcloud.travelplanner.travel.service.TravelService#getTravel"),
+			listOf("com.ktcloud.travelplanner.user.service.UserSummaryService#getById"),
 			summary.errorFrames,
 		)
 		assertTrue(summary.errorFingerprint.matches(Regex("^[0-9a-f]{64}$")))
 		assertFalse(serializedSummary.contains("secret-token"))
 		assertFalse(serializedSummary.contains("private.example"))
 		assertFalse(serializedSummary.contains("select password"))
-		assertFalse(serializedSummary.contains("TravelService.kt"))
+		assertFalse(serializedSummary.contains("UserSummaryService.kt"))
 		assertFalse(serializedSummary.contains(":77"))
 	}
 
@@ -42,9 +42,9 @@ class SafeExceptionSummaryFactoryTest {
 		val failure = IllegalStateException("not logged")
 		failure.stackTrace = Array(60) { index ->
 			StackTraceElement(
-				"com.ktcloud.travelplanner.timeline.service.TimelineService$index",
-				"loadTimeline",
-				"TimelineService.kt",
+				"com.ktcloud.travelplanner.user.service.UserProfileService$index",
+				"loadProfile",
+				"UserProfileService.kt",
 				index + 1,
 			)
 		}
@@ -62,8 +62,8 @@ class SafeExceptionSummaryFactoryTest {
 		val firstFailure = IllegalStateException("token=first-secret url=https://first.example")
 		firstFailure.stackTrace = arrayOf(
 			StackTraceElement(
-				"com.ktcloud.travelplanner.travel.service.TravelService",
-				"loadTravel",
+				"com.ktcloud.travelplanner.user.service.UserSummaryService",
+				"loadUser",
 				"FirstSecret.kt",
 				11,
 			),
@@ -72,8 +72,8 @@ class SafeExceptionSummaryFactoryTest {
 		val secondFailure = IllegalStateException("token=second-secret url=https://second.example")
 		secondFailure.stackTrace = arrayOf(
 			StackTraceElement(
-				"com.ktcloud.travelplanner.travel.service.TravelService",
-				"loadTravel",
+				"com.ktcloud.travelplanner.user.service.UserSummaryService",
+				"loadUser",
 				"SecondSecret.kt",
 				999,
 			),
@@ -87,8 +87,8 @@ class SafeExceptionSummaryFactoryTest {
 
 		secondFailure.stackTrace = arrayOf(
 			StackTraceElement(
-				"com.ktcloud.travelplanner.travel.service.TravelService",
-				"loadAnotherTravel",
+				"com.ktcloud.travelplanner.user.service.UserSummaryService",
+				"loadAnotherUser",
 				"SecondSecret.kt",
 				999,
 			),

@@ -71,7 +71,7 @@ class JwtTokenServiceTest {
 	)
 
 	private fun properties(secret: String): JwtProperties = JwtProperties(
-		issuer = "travel-planner-backend",
+		issuer = "identity-service",
 		accessTokenTtl = Duration.ofMinutes(30),
 		secret = secret,
 	)

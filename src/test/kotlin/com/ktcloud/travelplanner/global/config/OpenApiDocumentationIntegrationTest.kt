@@ -2,7 +2,7 @@ package com.ktcloud.travelplanner.global.config
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.ktcloud.travelplanner.TravelPlannerBackendApplication
+import com.ktcloud.travelplanner.IdentityServiceApplication
 import com.ktcloud.travelplanner.testsupport.TestcontainersConfiguration
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -19,7 +19,7 @@ import kotlin.test.assertTrue
 
 @ActiveProfiles("test")
 @SpringBootTest(
-	classes = [TravelPlannerBackendApplication::class],
+	classes = [IdentityServiceApplication::class],
 	webEnvironment = SpringBootTest.WebEnvironment.MOCK,
 )
 @AutoConfigureMockMvc
@@ -68,7 +68,7 @@ class OpenApiDocumentationIntegrationTest(
 
 	@Test
 	fun `business API remains protected when documentation paths are public`() {
-		mockMvc.get("/api/v1/countries")
+		mockMvc.get("/api/v1/users/00000000-0000-0000-0000-000000000001/summary")
 			.andExpect {
 				status { isUnauthorized() }
 			}
@@ -93,15 +93,11 @@ class OpenApiDocumentationIntegrationTest(
 			"/api/v1/auth/token/exchange",
 			"/api/v1/users/me/profile",
 			"/api/v1/users/me/profile-image/complete",
-			"/api/v1/travels",
-			"/api/v1/countries",
-			"/api/v1/places/search",
-			"/api/v1/travels/{travelId}/timeline-items",
-			"/api/v1/travels/{travelId}/routes",
-			"/api/v1/travels/{travelId}/members",
+			"/api/v1/users/{userId}/summary",
+			"/api/v1/users/lookup",
 		).forEach { path -> assertTrue(path in documentedPaths, "Missing documented path: $path") }
 
-		assertTrue(document.path("components").path("schemas").has("TravelCreateRequest"))
+		assertTrue(document.path("components").path("schemas").has("UserSummaryResponse"))
 		assertTrue(document.path("components").path("schemas").has("ProfileImageUploadCompleteRequest"))
 	}
 
@@ -125,13 +121,13 @@ class OpenApiDocumentationIntegrationTest(
 	}
 
 	private fun assertRequestParameters(document: JsonNode) {
-		val travelParameters = document.path("paths")
-			.path("/api/v1/travels")
+		val lookupParameters = document.path("paths")
+			.path("/api/v1/users/lookup")
 			.path("get")
 			.path("parameters")
 			.mapNotNull { it.path("name").textValue() }
-		assertFalse("principal" in travelParameters)
-		assertTrue("keyword" in travelParameters)
+		assertFalse("principal" in lookupParameters)
+		assertTrue("nickname" in lookupParameters)
 
 		val refreshCookie = document.path("paths")
 			.path("/api/v1/auth/token/refresh")

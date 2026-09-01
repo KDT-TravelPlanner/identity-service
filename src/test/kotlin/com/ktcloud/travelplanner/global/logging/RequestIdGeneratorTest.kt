@@ -22,4 +22,19 @@ class RequestIdGeneratorTest {
 		assertEquals(4, secondUuid.version())
 		assertNotEquals(firstRequestId, secondRequestId)
 	}
+
+	@Test
+	fun `canonical incoming UUID is preserved for service propagation`() {
+		val incoming = "018f1ed0-dead-beef-acde-0242ac120002"
+
+		assertEquals(incoming, requestIdGenerator.resolveOrGenerate(incoming))
+	}
+
+	@Test
+	fun `invalid incoming request id is replaced`() {
+		val resolved = requestIdGenerator.resolveOrGenerate("untrusted\r\nrequest-id")
+
+		UUID.fromString(resolved)
+		assertNotEquals("untrusted\r\nrequest-id", resolved)
+	}
 }
