@@ -24,8 +24,8 @@ class RequestIdGeneratorTest {
 	}
 
 	@Test
-	fun `canonical incoming UUID is preserved for service propagation`() {
-		val incoming = "018f1ed0-dead-beef-acde-0242ac120002"
+	fun `canonical incoming UUID v4 is preserved for service propagation`() {
+		val incoming = UUID.randomUUID().toString()
 
 		assertEquals(incoming, requestIdGenerator.resolveOrGenerate(incoming))
 	}
