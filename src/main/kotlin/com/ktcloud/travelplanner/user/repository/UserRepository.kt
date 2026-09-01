@@ -21,7 +21,7 @@ interface UserRepository : JpaRepository<User, UUID> {
         @Query(
                 value = """
                         SELECT EXISTS (
-                                SELECT 1 FROM user_table
+                                SELECT 1 FROM identity.user_table
                                 WHERE provider = :provider
                                         AND provider_user_id = :providerUserId
                                         AND deleted_at IS NOT NULL

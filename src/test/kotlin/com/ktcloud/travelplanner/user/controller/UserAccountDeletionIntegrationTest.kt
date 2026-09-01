@@ -59,7 +59,7 @@ class UserAccountDeletionIntegrationTest(
 
 	@BeforeEach
 	fun clearPersistentState() {
-		jdbcTemplate.update("DELETE FROM user_table")
+		jdbcTemplate.update("DELETE FROM identity.user_table")
 		redisTemplate.keys("${RedisRefreshTokenStore.KEY_PREFIX}:*")
 			.takeIf { it.isNotEmpty() }
 			?.let(redisTemplate::delete)
@@ -108,7 +108,7 @@ class UserAccountDeletionIntegrationTest(
 		assertFalse(redisTemplate.hasKey(secondTokenKey))
 		assertTrue(
 			jdbcTemplate.queryForObject(
-				"SELECT deleted_at IS NOT NULL FROM user_table WHERE id = ?",
+					"SELECT deleted_at IS NOT NULL FROM identity.user_table WHERE id = ?",
 				Boolean::class.java,
 				user.id,
 			) == true,

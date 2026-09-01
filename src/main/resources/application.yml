@@ -2,9 +2,13 @@ spring:
   application:
     name: identity-service
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/identity_dev}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/travel_diary_dev}
     username: ${SPRING_DATASOURCE_USERNAME:identity}
     password: ${SPRING_DATASOURCE_PASSWORD:identity_password}
+  flyway:
+    create-schemas: true
+    default-schema: identity
+    schemas: identity
   data:
     redis:
       host: ${SPRING_DATA_REDIS_HOST:localhost}
@@ -17,6 +21,7 @@ spring:
     show-sql: false
     properties:
       hibernate:
+        default_schema: identity
         format_sql: false
         use_sql_comments: false
   lifecycle:

@@ -1,6 +1,6 @@
--- Initial schema for the dedicated Identity database.
--- This migration owns an independent Flyway history and must not run against the monolith database.
-CREATE TABLE user_table (
+-- Initial migration owned by Identity inside the shared application database.
+-- Flyway keeps this migration history in the dedicated identity schema.
+CREATE TABLE identity.user_table (
     id UUID PRIMARY KEY,
     provider VARCHAR(20) NOT NULL,
     provider_user_id VARCHAR(255) NOT NULL,
