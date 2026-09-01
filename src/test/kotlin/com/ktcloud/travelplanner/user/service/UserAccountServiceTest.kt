@@ -12,57 +12,47 @@ import org.junit.jupiter.api.assertThrows
 import org.mockito.Mockito.doThrow
 import org.mockito.Mockito.inOrder
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.never
+import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.Mockito.`when`
 import org.springframework.web.client.RestClientException
 import java.util.Optional
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class UserAccountServiceTest {
-	private val userRepository = mock(UserRepository::class.java)
-	private val refreshTokenService = mock(RefreshTokenService::class.java)
+	private val localTransaction = mock(UserAccountLocalTransaction::class.java)
 	private val travelWithdrawalClient = mock(TravelWithdrawalClient::class.java)
-	private val service = UserAccountService(
-		userRepository,
-		refreshTokenService,
-		travelWithdrawalClient,
-		TestFixtures.FIXED_CLOCK,
-	)
+	private val service = UserAccountService(localTransaction, travelWithdrawalClient)
 
 	@Test
-	fun `Travel success is followed by soft delete and all refresh token revocation`() {
-		val user = User(OAuthProvider.GOOGLE, "account-to-delete")
-		`when`(userRepository.findById(TestFixtures.USER_ID)).thenReturn(Optional.of(user))
-		`when`(userRepository.saveAndFlush(user)).thenReturn(user)
-
+	fun `active user is checked before Travel and local withdrawal transaction`() {
 		service.deleteAccount(TestFixtures.USER_ID, AUTHORIZATION, REQUEST_ID)
 
-		assertTrue(user.isDeleted)
-		assertEquals(TestFixtures.FIXED_INSTANT, user.deletedAt)
-		val order = inOrder(travelWithdrawalClient, userRepository, refreshTokenService)
+		val order = inOrder(localTransaction, travelWithdrawalClient)
+		order.verify(localTransaction).requireActiveUser(TestFixtures.USER_ID)
 		order.verify(travelWithdrawalClient)
 			.prepareWithdrawal(TestFixtures.USER_ID, AUTHORIZATION, REQUEST_ID)
-		order.verify(userRepository).saveAndFlush(user)
-		order.verify(refreshTokenService).revokeAll(TestFixtures.USER_ID)
+		order.verify(localTransaction).completeWithdrawal(TestFixtures.USER_ID)
 	}
 
 	@Test
-	fun `missing active user does not call Travel or revoke tokens`() {
-		`when`(userRepository.findById(TestFixtures.USER_ID)).thenReturn(Optional.empty())
+	fun `missing active user does not call Travel or complete withdrawal`() {
+		doThrow(UserNotFoundException())
+			.`when`(localTransaction)
+			.requireActiveUser(TestFixtures.USER_ID)
 
 		assertThrows<UserNotFoundException> {
 			service.deleteAccount(TestFixtures.USER_ID, AUTHORIZATION, REQUEST_ID)
 		}
 
-		verifyNoInteractions(travelWithdrawalClient, refreshTokenService)
+		verifyNoInteractions(travelWithdrawalClient)
+		verify(localTransaction, never()).completeWithdrawal(TestFixtures.USER_ID)
 	}
 
 	@Test
-	fun `Travel failure leaves Identity user and tokens unchanged`() {
-		val user = User(OAuthProvider.GOOGLE, "account-to-keep")
-		`when`(userRepository.findById(TestFixtures.USER_ID)).thenReturn(Optional.of(user))
+	fun `Travel failure does not start local withdrawal transaction`() {
 		doThrow(TravelServiceUnavailableException(RestClientException("unavailable")))
 			.`when`(travelWithdrawalClient)
 			.prepareWithdrawal(TestFixtures.USER_ID, AUTHORIZATION, REQUEST_ID)
@@ -71,12 +61,45 @@ class UserAccountServiceTest {
 			service.deleteAccount(TestFixtures.USER_ID, AUTHORIZATION, REQUEST_ID)
 		}
 
-		assertFalse(user.isDeleted)
-		verifyNoInteractions(refreshTokenService)
+		verify(localTransaction, never()).completeWithdrawal(TestFixtures.USER_ID)
 	}
 
 	companion object {
 		private const val AUTHORIZATION = "Bearer access-token"
 		private const val REQUEST_ID = "018f1ed0-dead-beef-acde-0242ac120002"
+	}
+}
+
+class UserAccountLocalTransactionTest {
+	private val userRepository = mock(UserRepository::class.java)
+	private val refreshTokenService = mock(RefreshTokenService::class.java)
+	private val localTransaction = UserAccountLocalTransaction(
+		userRepository,
+		refreshTokenService,
+		TestFixtures.FIXED_CLOCK,
+	)
+
+	@Test
+	fun `active user check rejects missing user`() {
+		`when`(userRepository.existsById(TestFixtures.USER_ID)).thenReturn(false)
+
+		assertThrows<UserNotFoundException> {
+			localTransaction.requireActiveUser(TestFixtures.USER_ID)
+		}
+	}
+
+	@Test
+	fun `local withdrawal soft deletes user then revokes every refresh token`() {
+		val user = User(OAuthProvider.GOOGLE, "account-to-delete")
+		`when`(userRepository.findById(TestFixtures.USER_ID)).thenReturn(Optional.of(user))
+		`when`(userRepository.saveAndFlush(user)).thenReturn(user)
+
+		localTransaction.completeWithdrawal(TestFixtures.USER_ID)
+
+		assertTrue(user.isDeleted)
+		assertEquals(TestFixtures.FIXED_INSTANT, user.deletedAt)
+		val order = inOrder(userRepository, refreshTokenService)
+		order.verify(userRepository).saveAndFlush(user)
+		order.verify(refreshTokenService).revokeAll(TestFixtures.USER_ID)
 	}
 }

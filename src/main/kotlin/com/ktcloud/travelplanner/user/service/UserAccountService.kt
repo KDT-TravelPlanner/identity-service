@@ -12,23 +12,40 @@ import java.util.UUID
 
 @Service
 class UserAccountService(
-	private val userRepository: UserRepository,
-	private val refreshTokenService: RefreshTokenService,
+	private val localTransaction: UserAccountLocalTransaction,
 	private val travelWithdrawalClient: TravelWithdrawalClient,
-	@Qualifier("utcClock") private val clock: Clock,
 ) {
-	@Transactional
 	fun deleteAccount(
 		userId: UUID,
 		authorization: String,
 		requestId: String,
 	) {
-		val user = userRepository.findById(userId)
-			.orElseThrow(::UserNotFoundException)
+		localTransaction.requireActiveUser(userId)
 
 		// Travel owns planner ownership and membership cleanup. Its operation must be idempotent,
 		// because an Identity persistence failure can cause this request to be retried.
 		travelWithdrawalClient.prepareWithdrawal(userId, authorization, requestId)
+		localTransaction.completeWithdrawal(userId)
+	}
+}
+
+@Service
+class UserAccountLocalTransaction(
+	private val userRepository: UserRepository,
+	private val refreshTokenService: RefreshTokenService,
+	@Qualifier("utcClock") private val clock: Clock,
+) {
+	@Transactional(readOnly = true)
+	fun requireActiveUser(userId: UUID) {
+		if (!userRepository.existsById(userId)) {
+			throw UserNotFoundException()
+		}
+	}
+
+	@Transactional
+	fun completeWithdrawal(userId: UUID) {
+		val user = userRepository.findById(userId)
+			.orElseThrow(::UserNotFoundException)
 
 		user.softDelete(Instant.now(clock))
 		userRepository.saveAndFlush(user)

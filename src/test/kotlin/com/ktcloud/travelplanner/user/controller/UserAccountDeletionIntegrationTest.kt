@@ -12,7 +12,9 @@ import com.ktcloud.travelplanner.user.model.OAuthProvider
 import com.ktcloud.travelplanner.user.model.User
 import com.ktcloud.travelplanner.user.repository.UserRepository
 import org.hamcrest.Matchers.equalTo
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.mockito.Mockito.doAnswer
 import org.mockito.Mockito.doThrow
 import org.mockito.Mockito.verify
 import org.springframework.beans.factory.annotation.Autowired
@@ -30,7 +32,7 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.delete
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
-import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.web.client.RestClientException
 import java.time.Duration
 import java.util.UUID
@@ -43,7 +45,6 @@ import kotlin.test.assertTrue
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration::class)
-@Transactional
 class UserAccountDeletionIntegrationTest(
 	@Autowired private val mockMvc: MockMvc,
 	@Autowired private val userRepository: UserRepository,
@@ -56,6 +57,14 @@ class UserAccountDeletionIntegrationTest(
 	@MockitoBean
 	private lateinit var travelWithdrawalClient: TravelWithdrawalClient
 
+	@BeforeEach
+	fun clearPersistentState() {
+		jdbcTemplate.update("DELETE FROM user_table")
+		redisTemplate.keys("${RedisRefreshTokenStore.KEY_PREFIX}:*")
+			.takeIf { it.isNotEmpty() }
+			?.let(redisTemplate::delete)
+	}
+
 	@Test
 	fun `account deletion forwards auth and request id then revokes every device`() {
 		val user = saveUser()
@@ -67,6 +76,11 @@ class UserAccountDeletionIntegrationTest(
 		assertTrue(redisTemplate.hasKey(secondTokenKey))
 
 		val authorization = "Bearer ${firstDevice.accessToken}"
+		doAnswer {
+			assertFalse(TransactionSynchronizationManager.isActualTransactionActive())
+			null
+		}.`when`(travelWithdrawalClient)
+			.prepareWithdrawal(requireNotNull(user.id), authorization, REQUEST_ID)
 		val deleteResponse = mockMvc.delete("/api/v1/users/me") {
 			header(HttpHeaders.AUTHORIZATION, authorization)
 			header(REQUEST_ID_HEADER, REQUEST_ID)
