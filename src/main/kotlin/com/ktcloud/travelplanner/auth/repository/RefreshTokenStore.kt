@@ -26,6 +26,8 @@ interface RefreshTokenStore {
 	fun rotate(token: String, rotatedToken: String): RefreshTokenRotationResult
 
 	fun revokeFamily(token: String)
+
+	fun revokeAllByUserId(userId: UUID)
 }
 
 @Component
@@ -50,9 +52,10 @@ class RedisRefreshTokenStore(
 		val tokenHash = tokenHasher.hash(token)
 		redisTemplate.execute(
 			SAVE_SCRIPT,
-			listOf(tokenKey(tokenHash), familyKey(familyId)),
+			listOf(tokenKey(tokenHash), familyKey(familyId), userKey(userId)),
 			payload(userId, familyId),
 			tokenHash,
+			familyId,
 			ttl.toMillis().toString(),
 		)
 	}
@@ -71,6 +74,7 @@ class RedisRefreshTokenStore(
 			rotatedTokenHash,
 			FAMILY_KEY_PREFIX_WITH_SEPARATOR,
 			TOKEN_KEY_PREFIX_WITH_SEPARATOR,
+			USER_KEY_PREFIX_WITH_SEPARATOR,
 		)
 		return when {
 			result.startsWith(ROTATION_SUCCESS_PREFIX) ->
@@ -87,6 +91,16 @@ class RedisRefreshTokenStore(
 			listOf(tokenKey(tokenHash), usedKey(tokenHash)),
 			FAMILY_KEY_PREFIX_WITH_SEPARATOR,
 			TOKEN_KEY_PREFIX_WITH_SEPARATOR,
+			USER_KEY_PREFIX_WITH_SEPARATOR,
+		)
+	}
+
+	override fun revokeAllByUserId(userId: UUID) {
+		redisTemplate.execute(
+			REVOKE_ALL_SCRIPT,
+			listOf(userKey(userId)),
+			FAMILY_KEY_PREFIX_WITH_SEPARATOR,
+			TOKEN_KEY_PREFIX_WITH_SEPARATOR,
 		)
 	}
 
@@ -98,14 +112,18 @@ class RedisRefreshTokenStore(
 
 	private fun usedKey(tokenHash: String): String = "$USED_KEY_PREFIX_WITH_SEPARATOR$tokenHash"
 
+	private fun userKey(userId: UUID): String = "$USER_KEY_PREFIX_WITH_SEPARATOR$userId"
+
 	companion object {
 		internal const val KEY_PREFIX = "auth:refresh"
 		internal const val TOKEN_KEY_PREFIX = "$KEY_PREFIX:token"
 		internal const val FAMILY_KEY_PREFIX = "$KEY_PREFIX:family"
 		internal const val USED_KEY_PREFIX = "$KEY_PREFIX:used"
+		internal const val USER_KEY_PREFIX = "$KEY_PREFIX:user"
 		private const val TOKEN_KEY_PREFIX_WITH_SEPARATOR = "$TOKEN_KEY_PREFIX:"
 		private const val FAMILY_KEY_PREFIX_WITH_SEPARATOR = "$FAMILY_KEY_PREFIX:"
 		private const val USED_KEY_PREFIX_WITH_SEPARATOR = "$USED_KEY_PREFIX:"
+		private const val USER_KEY_PREFIX_WITH_SEPARATOR = "$USER_KEY_PREFIX:"
 		private const val PAYLOAD_SEPARATOR = "|"
 		private const val ROTATION_SUCCESS_PREFIX = "ROTATED|"
 		private const val ROTATION_REUSED = "REUSED"
@@ -113,8 +131,10 @@ class RedisRefreshTokenStore(
 
 		private val SAVE_SCRIPT = DefaultRedisScript(
 			"""
-			redis.call('SET', KEYS[1], ARGV[1], 'PX', ARGV[3])
-			redis.call('SET', KEYS[2], ARGV[2], 'PX', ARGV[3])
+			redis.call('SET', KEYS[1], ARGV[1], 'PX', ARGV[4])
+			redis.call('SET', KEYS[2], ARGV[2], 'PX', ARGV[4])
+			redis.call('SADD', KEYS[3], ARGV[3])
+			redis.call('PEXPIRE', KEYS[3], ARGV[4])
 			return 'SAVED'
 			""".trimIndent(),
 			String::class.java,
@@ -153,6 +173,18 @@ class RedisRefreshTokenStore(
 			local reusedFamilyKey = ARGV[3] .. reusedFamilyId
 			local activeTokenHash = redis.call('GET', reusedFamilyKey)
 			if activeTokenHash then
+			    local activePayload = redis.call('GET', ARGV[4] .. activeTokenHash)
+			    if activePayload then
+			        local separator = string.find(activePayload, '|', 1, true)
+			        if separator then
+			            local userId = string.sub(activePayload, 1, separator - 1)
+			            local userKey = ARGV[5] .. userId
+			            redis.call('SREM', userKey, reusedFamilyId)
+			            if redis.call('SCARD', userKey) == 0 then
+			                redis.call('DEL', userKey)
+			            end
+			        end
+			    end
 			    redis.call('DEL', ARGV[4] .. activeTokenHash)
 			end
 			redis.call('DEL', reusedFamilyKey)
@@ -165,9 +197,11 @@ class RedisRefreshTokenStore(
 			"""
 			local activePayload = redis.call('GET', KEYS[1])
 			local familyId = nil
+			local userId = nil
 			if activePayload then
 			    local separator = string.find(activePayload, '|', 1, true)
 			    if separator then
+			        userId = string.sub(activePayload, 1, separator - 1)
 			        familyId = string.sub(activePayload, separator + 1)
 			    end
 			else
@@ -179,13 +213,47 @@ class RedisRefreshTokenStore(
 			local familyKey = ARGV[1] .. familyId
 			local activeTokenHash = redis.call('GET', familyKey)
 			if activeTokenHash then
+			    if not userId then
+			        local currentPayload = redis.call('GET', ARGV[2] .. activeTokenHash)
+			        if currentPayload then
+			            local separator = string.find(currentPayload, '|', 1, true)
+			            if separator then
+			                userId = string.sub(currentPayload, 1, separator - 1)
+			            end
+			        end
+			    end
 			    redis.call('DEL', ARGV[2] .. activeTokenHash)
 			end
 			redis.call('DEL', KEYS[1])
+			redis.call('DEL', KEYS[2])
 			redis.call('DEL', familyKey)
+			if userId then
+			    local userKey = ARGV[3] .. userId
+			    redis.call('SREM', userKey, familyId)
+			    if redis.call('SCARD', userKey) == 0 then
+			        redis.call('DEL', userKey)
+			    end
+			end
 			return 'REVOKED'
 			""".trimIndent(),
 			String::class.java,
+		)
+
+		private val REVOKE_ALL_SCRIPT = DefaultRedisScript(
+			"""
+			local familyIds = redis.call('SMEMBERS', KEYS[1])
+			for _, familyId in ipairs(familyIds) do
+			    local familyKey = ARGV[1] .. familyId
+			    local activeTokenHash = redis.call('GET', familyKey)
+			    if activeTokenHash then
+			        redis.call('DEL', ARGV[2] .. activeTokenHash)
+			    end
+			    redis.call('DEL', familyKey)
+			end
+			redis.call('DEL', KEYS[1])
+			return #familyIds
+			""".trimIndent(),
+			Long::class.java,
 		)
 	}
 }

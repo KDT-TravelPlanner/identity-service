@@ -155,6 +155,31 @@ class RefreshTokenControllerIntegrationTest(
 		assertTrue(redisTemplate.keys("${RedisRefreshTokenStore.FAMILY_KEY_PREFIX}:*").isEmpty())
 	}
 
+	@Test
+	fun `user revocation removes all of that users active families only`() {
+		val targetUser = saveUser()
+		val otherUser = saveUser()
+		val targetFirst = exchangeForRefreshCookie(targetUser)
+		val targetSecond = exchangeForRefreshCookie(targetUser)
+		val other = exchangeForRefreshCookie(otherUser)
+
+		refreshTokenStore.revokeAllByUserId(requireNotNull(targetUser.id))
+
+		assertFalse(redisTemplate.hasKey(tokenKey(targetFirst.value)))
+		assertFalse(redisTemplate.hasKey(tokenKey(targetSecond.value)))
+		assertTrue(redisTemplate.hasKey(tokenKey(other.value)))
+		assertFalse(
+			redisTemplate.hasKey(
+				"${RedisRefreshTokenStore.USER_KEY_PREFIX}:${targetUser.id}",
+			),
+		)
+		assertTrue(
+			redisTemplate.hasKey(
+				"${RedisRefreshTokenStore.USER_KEY_PREFIX}:${otherUser.id}",
+			),
+		)
+	}
+
 	private fun assertInvalidRefresh(cookie: MockCookie?) {
 		val response = refresh(cookie)
 			.andExpect {

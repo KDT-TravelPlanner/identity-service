@@ -134,6 +134,13 @@ class RefreshTokenServiceTest {
 		verify(tokenStore, never()).revokeFamily("too-short")
 	}
 
+	@Test
+	fun `revokes every refresh token family for a user`() {
+		service.revokeAll(TestFixtures.USER_ID)
+
+		verify(tokenStore).revokeAllByUserId(TestFixtures.USER_ID)
+	}
+
 	companion object {
 		private const val FAMILY_ID = "refresh-token-family"
 		private val REFRESH_TOKEN = "r".repeat(43)

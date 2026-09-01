@@ -29,7 +29,7 @@ until wget -q -O /dev/null "$management_health_url" 2>/dev/null; do
       boot_status=$?
     fi
     boot_pid=""
-    echo "Backend bootRun exited before management health became ready." >&2
+    echo "Identity service bootRun exited before management health became ready." >&2
     exit "$boot_status"
   fi
   sleep 2

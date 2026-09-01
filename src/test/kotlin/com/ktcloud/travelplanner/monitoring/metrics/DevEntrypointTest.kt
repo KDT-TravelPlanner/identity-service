@@ -58,7 +58,7 @@ class DevEntrypointTest {
 
 		assertNotEquals(0, process.exitValue(), output)
 		assertTrue(
-			output.contains("Backend bootRun exited before management health became ready."),
+			output.contains("Identity service bootRun exited before management health became ready."),
 			output,
 		)
 	}

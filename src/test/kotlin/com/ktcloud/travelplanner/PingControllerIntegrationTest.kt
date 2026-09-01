@@ -29,12 +29,12 @@ class PingControllerIntegrationTest(
 	private lateinit var userRepository: UserRepository
 
 	@Test
-	fun `ping keeps its endpoint and returns TravelPlanner application name`() {
+	fun `ping keeps its endpoint and returns Identity application name`() {
 		mockMvc.get("/api/ping")
 			.andExpect {
 				status { isOk() }
 				jsonPath("$.status", equalTo("ok"))
-				jsonPath("$.application", equalTo("travel-planner-backend"))
+				jsonPath("$.application", equalTo("identity-service"))
 			}
 	}
 

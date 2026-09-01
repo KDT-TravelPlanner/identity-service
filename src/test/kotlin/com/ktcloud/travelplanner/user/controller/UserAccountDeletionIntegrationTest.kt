@@ -6,11 +6,17 @@ import com.ktcloud.travelplanner.auth.repository.RedisRefreshTokenStore
 import com.ktcloud.travelplanner.auth.repository.RefreshTokenHasher
 import com.ktcloud.travelplanner.auth.service.OAuthExchangeCodeService
 import com.ktcloud.travelplanner.testsupport.TestcontainersConfiguration
+import com.ktcloud.travelplanner.user.client.TravelServiceUnavailableException
+import com.ktcloud.travelplanner.user.client.TravelWithdrawalClient
 import com.ktcloud.travelplanner.user.model.OAuthProvider
 import com.ktcloud.travelplanner.user.model.User
 import com.ktcloud.travelplanner.user.repository.UserRepository
 import org.hamcrest.Matchers.equalTo
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.mockito.Mockito.doAnswer
+import org.mockito.Mockito.doThrow
+import org.mockito.Mockito.verify
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc
 import org.springframework.boot.test.context.SpringBootTest
@@ -21,11 +27,13 @@ import org.springframework.http.MediaType
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.mock.web.MockCookie
 import org.springframework.test.context.ActiveProfiles
+import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.delete
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
-import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionSynchronizationManager
+import org.springframework.web.client.RestClientException
 import java.time.Duration
 import java.util.UUID
 import kotlin.test.assertEquals
@@ -37,7 +45,6 @@ import kotlin.test.assertTrue
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration::class)
-@Transactional
 class UserAccountDeletionIntegrationTest(
 	@Autowired private val mockMvc: MockMvc,
 	@Autowired private val userRepository: UserRepository,
@@ -47,60 +54,100 @@ class UserAccountDeletionIntegrationTest(
 	@Autowired private val refreshTokenHasher: RefreshTokenHasher,
 	@Autowired private val jdbcTemplate: JdbcTemplate,
 ) {
-	@Test
-	fun `account deletion soft deletes user revokes refresh token and blocks existing tokens`() {
-		val authentication = login()
-		val refreshTokenKey = "${RedisRefreshTokenStore.TOKEN_KEY_PREFIX}:${refreshTokenHasher.hash(authentication.refreshCookie.value)}"
-		assertTrue(redisTemplate.hasKey(refreshTokenKey))
+	@MockitoBean
+	private lateinit var travelWithdrawalClient: TravelWithdrawalClient
 
+	@BeforeEach
+	fun clearPersistentState() {
+		jdbcTemplate.update("DELETE FROM identity.user_table")
+		redisTemplate.keys("${RedisRefreshTokenStore.KEY_PREFIX}:*")
+			.takeIf { it.isNotEmpty() }
+			?.let(redisTemplate::delete)
+	}
+
+	@Test
+	fun `account deletion forwards auth and request id then revokes every device`() {
+		val user = saveUser()
+		val firstDevice = login(user)
+		val secondDevice = login(user)
+		val firstTokenKey = tokenKey(firstDevice.refreshCookie.value)
+		val secondTokenKey = tokenKey(secondDevice.refreshCookie.value)
+		assertTrue(redisTemplate.hasKey(firstTokenKey))
+		assertTrue(redisTemplate.hasKey(secondTokenKey))
+
+		val authorization = "Bearer ${firstDevice.accessToken}"
+		doAnswer {
+			assertFalse(TransactionSynchronizationManager.isActualTransactionActive())
+			null
+		}.`when`(travelWithdrawalClient)
+			.prepareWithdrawal(requireNotNull(user.id), authorization, REQUEST_ID)
 		val deleteResponse = mockMvc.delete("/api/v1/users/me") {
-			header(HttpHeaders.AUTHORIZATION, "Bearer ${authentication.accessToken}")
-			cookie(authentication.refreshCookie)
+			header(HttpHeaders.AUTHORIZATION, authorization)
+			header(REQUEST_ID_HEADER, REQUEST_ID)
+			cookie(firstDevice.refreshCookie)
 		}
 			.andExpect {
 				status { isOk() }
 				jsonPath("$.data") { exists() }
+				header { string(REQUEST_ID_HEADER, REQUEST_ID) }
 				header { exists(HttpHeaders.SET_COOKIE) }
 			}
 			.andReturn()
 			.response
 
+		verify(travelWithdrawalClient).prepareWithdrawal(
+			requireNotNull(user.id),
+			authorization,
+			REQUEST_ID,
+		)
 		val expiredCookie = MockCookie.parse(assertNotNull(deleteResponse.getHeader(HttpHeaders.SET_COOKIE)))
 		assertEquals("", expiredCookie.value)
 		assertEquals(Duration.ZERO.seconds.toInt(), expiredCookie.maxAge)
 		assertEquals(RefreshTokenCookieFactory.COOKIE_PATH, expiredCookie.path)
-		assertFalse(redisTemplate.hasKey(refreshTokenKey))
+		assertFalse(redisTemplate.hasKey(firstTokenKey))
+		assertFalse(redisTemplate.hasKey(secondTokenKey))
 		assertTrue(
 			jdbcTemplate.queryForObject(
-				"SELECT deleted_at IS NOT NULL FROM user_table WHERE id = ?",
+					"SELECT deleted_at IS NOT NULL FROM identity.user_table WHERE id = ?",
 				Boolean::class.java,
-				authentication.userId,
+				user.id,
 			) == true,
 		)
 
 		mockMvc.get("/api/v1/users/me/profile") {
-			header(HttpHeaders.AUTHORIZATION, "Bearer ${authentication.accessToken}")
+			header(HttpHeaders.AUTHORIZATION, authorization)
 		}
 			.andExpect {
 				status { isUnauthorized() }
 				jsonPath("$.code", equalTo("UNAUTHORIZED"))
 			}
 
-		mockMvc.post("/api/v1/auth/token/refresh") {
+		assertRefreshRejected(firstDevice.refreshCookie)
+		assertRefreshRejected(secondDevice.refreshCookie)
+	}
+
+	@Test
+	fun `Travel failure returns 503 without deleting user or revoking tokens`() {
+		val user = saveUser()
+		val authentication = login(user)
+		val authorization = "Bearer ${authentication.accessToken}"
+		doThrow(TravelServiceUnavailableException(RestClientException("down")))
+			.`when`(travelWithdrawalClient)
+			.prepareWithdrawal(requireNotNull(user.id), authorization, REQUEST_ID)
+
+		mockMvc.delete("/api/v1/users/me") {
+			header(HttpHeaders.AUTHORIZATION, authorization)
+			header(REQUEST_ID_HEADER, REQUEST_ID)
 			cookie(authentication.refreshCookie)
 		}
 			.andExpect {
-				status { isUnauthorized() }
-				jsonPath("$.code", equalTo("INVALID_REFRESH_TOKEN"))
+				status { isServiceUnavailable() }
+				jsonPath("$.code", equalTo("TRAVEL_SERVICE_UNAVAILABLE"))
+				header { doesNotExist(HttpHeaders.SET_COOKIE) }
 			}
 
-		mockMvc.delete("/api/v1/users/me") {
-			header(HttpHeaders.AUTHORIZATION, "Bearer ${authentication.accessToken}")
-		}
-			.andExpect {
-				status { isUnauthorized() }
-				jsonPath("$.code", equalTo("UNAUTHORIZED"))
-			}
+		assertTrue(userRepository.existsById(requireNotNull(user.id)))
+		assertTrue(redisTemplate.hasKey(tokenKey(authentication.refreshCookie.value)))
 	}
 
 	@Test
@@ -112,13 +159,14 @@ class UserAccountDeletionIntegrationTest(
 			}
 	}
 
-	private fun login(): AuthenticationFixture {
-		val user = userRepository.saveAndFlush(
-			User(
-				provider = OAuthProvider.GOOGLE,
-				providerUserId = "delete-account-${UUID.randomUUID()}",
-			),
-		)
+	private fun saveUser(): User = userRepository.saveAndFlush(
+		User(
+			provider = OAuthProvider.GOOGLE,
+			providerUserId = "delete-account-${UUID.randomUUID()}",
+		),
+	)
+
+	private fun login(user: User): AuthenticationFixture {
 		val code = exchangeCodeService.issue(requireNotNull(user.id))
 		val response = mockMvc.post("/api/v1/auth/token/exchange") {
 			contentType = MediaType.APPLICATION_JSON
@@ -129,15 +177,29 @@ class UserAccountDeletionIntegrationTest(
 			.response
 
 		return AuthenticationFixture(
-			userId = requireNotNull(user.id),
 			accessToken = objectMapper.readTree(response.contentAsByteArray).at("/data/accessToken").asText(),
 			refreshCookie = MockCookie.parse(assertNotNull(response.getHeader(HttpHeaders.SET_COOKIE))),
 		)
 	}
 
+	private fun assertRefreshRejected(cookie: MockCookie) {
+		mockMvc.post("/api/v1/auth/token/refresh") { cookie(cookie) }
+			.andExpect {
+				status { isUnauthorized() }
+				jsonPath("$.code", equalTo("INVALID_REFRESH_TOKEN"))
+			}
+	}
+
+	private fun tokenKey(token: String): String =
+		"${RedisRefreshTokenStore.TOKEN_KEY_PREFIX}:${refreshTokenHasher.hash(token)}"
+
 	private data class AuthenticationFixture(
-		val userId: UUID,
 		val accessToken: String,
 		val refreshCookie: MockCookie,
 	)
+
+	companion object {
+		private const val REQUEST_ID_HEADER = "X-Request-Id"
+		private const val REQUEST_ID = "018f1ed0-dead-beef-acde-0242ac120002"
+	}
 }

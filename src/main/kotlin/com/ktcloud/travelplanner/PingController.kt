@@ -12,7 +12,7 @@ data class PingResponse(
 )
 
 internal object PingResponseFactory {
-	const val DEFAULT_APPLICATION_NAME = "travel-planner-backend"
+	const val DEFAULT_APPLICATION_NAME = "identity-service"
 
 	fun create(
 		applicationName: String?,

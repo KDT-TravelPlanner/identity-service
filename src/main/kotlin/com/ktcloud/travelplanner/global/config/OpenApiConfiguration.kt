@@ -16,7 +16,7 @@ class OpenApiConfiguration {
 	private val parameterNameDiscoverer = DefaultParameterNameDiscoverer()
 
 	@Bean
-	fun travelPlannerOpenApi(): OpenAPI = OpenAPI()
+	fun identityServiceOpenApi(): OpenAPI = OpenAPI()
 		.info(
 			Info()
 				.title(API_TITLE)
@@ -53,8 +53,8 @@ class OpenApiConfiguration {
 		}
 
 	companion object {
-		const val API_TITLE = "KDT-TravelPlanner API"
-		const val API_DESCRIPTION = "KDT-TravelPlanner backend API"
+		const val API_TITLE = "KDT-TravelPlanner Identity API"
+		const val API_DESCRIPTION = "Identity, OAuth, JWT and user profile API"
 		const val API_VERSION = "v1"
 		const val SECURITY_SCHEME_NAME = "bearerAuth"
 		private const val BEARER_SCHEME = "bearer"

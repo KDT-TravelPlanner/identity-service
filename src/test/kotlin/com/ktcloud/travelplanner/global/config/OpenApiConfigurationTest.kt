@@ -14,8 +14,8 @@ class OpenApiConfigurationTest {
 	private val configuration = OpenApiConfiguration()
 
 	@Test
-	fun `OpenAPI metadata defines the TravelPlanner JWT contract`() {
-		val openApi = configuration.travelPlannerOpenApi()
+	fun `OpenAPI metadata defines the Identity JWT contract`() {
+		val openApi = configuration.identityServiceOpenApi()
 
 		assertEquals(OpenApiConfiguration.API_TITLE, openApi.info.title)
 		assertEquals(OpenApiConfiguration.API_DESCRIPTION, openApi.info.description)

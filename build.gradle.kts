@@ -8,7 +8,7 @@ plugins {
 
 group = "com.ktcloud"
 version = "0.0.1-SNAPSHOT"
-description = "Travel Planner backend"
+description = "Travel Planner identity service"
 
 java {
 	toolchain {

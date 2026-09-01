@@ -25,7 +25,9 @@ class RequestLoggingFilter(
 		response: HttpServletResponse,
 		filterChain: FilterChain,
 	) {
-		val requestId = requestIdGenerator.generate()
+		val requestId = requestIdGenerator.resolveOrGenerate(
+			request.getHeader(RequestIdGenerator.HEADER_NAME),
+		)
 		val startedAt = System.nanoTime()
 		var hasUnexpectedFailure = false
 

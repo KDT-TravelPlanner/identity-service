@@ -24,7 +24,7 @@ class JwtAuthenticationFilterTest {
 	private val userId = UUID.fromString("11111111-2222-3333-4444-555555555555")
 	private val tokenService = JwtTokenService(
 		JwtProperties(
-			issuer = "travel-planner-backend",
+			issuer = "identity-service",
 			accessTokenTtl = Duration.ofMinutes(30),
 			secret = "test-jwt-secret-with-at-least-32-bytes",
 		),

@@ -33,11 +33,15 @@ class UserRepositoryIntegrationTest : ContainerIntegrationTestSupport() {
 	@Test
 	fun `Flyway creates user table and records migration`() {
 		val tableCount = jdbcTemplate.queryForObject(
-			"SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'user_table'",
+			"""
+			SELECT COUNT(*)
+			FROM information_schema.tables
+			WHERE table_schema = 'identity' AND table_name = 'user_table'
+			""".trimIndent(),
 			Int::class.java,
 		)
 		val migrationCount = jdbcTemplate.queryForObject(
-			"SELECT COUNT(*) FROM flyway_schema_history WHERE version = '1' AND success = TRUE",
+			"SELECT COUNT(*) FROM identity.flyway_schema_history WHERE version = '1' AND success = TRUE",
 			Int::class.java,
 		)
 
@@ -92,7 +96,7 @@ class UserRepositoryIntegrationTest : ContainerIntegrationTestSupport() {
 		assertThrows(DataIntegrityViolationException::class.java) {
 			jdbcTemplate.update(
 				"""
-				INSERT INTO user_table (
+					INSERT INTO identity.user_table (
 				    id, provider, provider_user_id, profile_completed, created_at, updated_at
 				) VALUES (?, ?, ?, FALSE, ?, ?)
 				""".trimIndent(),

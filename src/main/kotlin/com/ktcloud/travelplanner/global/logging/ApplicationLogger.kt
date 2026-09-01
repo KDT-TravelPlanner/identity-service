@@ -46,10 +46,7 @@ internal object RequestLogLevelPolicy {
 		ErrorCode.CONFLICT,
 	)
 	private val expectedWarningErrorCodes = setOf(
-		ErrorCode.GOOGLE_PLACES_TIMEOUT,
-		ErrorCode.GOOGLE_PLACES_QUOTA_EXCEEDED,
-		ErrorCode.GOOGLE_ROUTES_TIMEOUT,
-		ErrorCode.GOOGLE_ROUTES_QUOTA_EXCEEDED,
+		ErrorCode.TRAVEL_SERVICE_UNAVAILABLE,
 	)
 
 	fun resolve(httpStatus: Int, errorCode: ErrorCode?): RequestLogDecision = when {

@@ -1,6 +1,7 @@
 package com.ktcloud.travelplanner.user.controller
 
 import com.ktcloud.travelplanner.auth.controller.RefreshTokenCookieFactory
+import com.ktcloud.travelplanner.global.logging.RequestLoggingContext
 import com.ktcloud.travelplanner.global.response.ApiResponse
 import com.ktcloud.travelplanner.global.security.AuthenticatedUserPrincipal
 import com.ktcloud.travelplanner.user.dto.ProfileImageUploadCompleteRequest
@@ -11,17 +12,18 @@ import com.ktcloud.travelplanner.user.dto.UserProfileUpdateRequest
 import com.ktcloud.travelplanner.user.service.ProfileImageUploadService
 import com.ktcloud.travelplanner.user.service.UserAccountService
 import com.ktcloud.travelplanner.user.service.UserProfileService
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import jakarta.validation.Valid
 import org.springframework.http.HttpHeaders
 import org.springframework.security.core.annotation.AuthenticationPrincipal
-import org.springframework.web.bind.annotation.CookieValue
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
@@ -62,10 +64,15 @@ class UserController(
 	@DeleteMapping
 	fun deleteAccount(
 		@AuthenticationPrincipal principal: AuthenticatedUserPrincipal,
-		@CookieValue(name = RefreshTokenCookieFactory.COOKIE_NAME, required = false) refreshToken: String?,
+		@RequestHeader(HttpHeaders.AUTHORIZATION) authorization: String,
+		request: HttpServletRequest,
 		response: HttpServletResponse,
 	): ApiResponse<Unit> {
-		userAccountService.deleteAccount(principal.userId, refreshToken)
+		userAccountService.deleteAccount(
+			userId = principal.userId,
+			authorization = authorization,
+			requestId = requireNotNull(RequestLoggingContext.getRequestId(request)),
+		)
 		response.addHeader(HttpHeaders.SET_COOKIE, refreshTokenCookieFactory.expire().toString())
 		return ApiResponse.success(Unit)
 	}

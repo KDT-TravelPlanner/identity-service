@@ -14,7 +14,7 @@ import java.time.Instant
 import java.util.UUID
 
 @Entity
-@Table(name = "user_table")
+@Table(name = "user_table", schema = "identity")
 @SQLRestriction("deleted_at IS NULL")
 class User(
 	@Enumerated(EnumType.STRING)
