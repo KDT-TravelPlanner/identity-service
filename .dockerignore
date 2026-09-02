@@ -1,6 +1,7 @@
 .git
 .github
 .gradle
+.kotlin
 src
 docs
 README.md
