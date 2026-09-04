@@ -82,7 +82,8 @@ tasks.withType<Test> {
 }
 
 tasks.named<Test>("test") {
-	exclude("**/*IntegrationTest.class")
+	// 단위 테스트만. 통합/어댑터는 전용 태스크로 분리한다.
+	exclude("**/*IntegrationTest.class", "**/client/**")
 }
 
 val integrationTest by tasks.registering(Test::class) {
@@ -94,8 +95,17 @@ val integrationTest by tasks.registering(Test::class) {
 	shouldRunAfter(tasks.named("test"))
 }
 
+val adapterTest by tasks.registering(Test::class) {
+	description = "Runs outbound HTTP client(adapter) contract tests."
+	group = "verification"
+	testClassesDirs = sourceSets["test"].output.classesDirs
+	classpath = sourceSets["test"].runtimeClasspath
+	include("**/client/**")
+	shouldRunAfter(tasks.named("test"))
+}
+
 tasks.named("check") {
-	dependsOn(integrationTest)
+	dependsOn(integrationTest, adapterTest)
 }
 
 tasks.bootJar {
