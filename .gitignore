@@ -44,3 +44,8 @@ out/
 /BACKEND_CHECKLIST.local.md
 /TROUBLESHOOTING.local.md
 /logs/
+
+### Local env (실값) — .env.example 만 커밋 ###
+.env
+.env.*
+!.env.example
