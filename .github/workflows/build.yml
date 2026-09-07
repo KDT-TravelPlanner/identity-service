@@ -6,6 +6,9 @@ name: Identity 도커 이미지 및 HTTP Adapter 검증
 #   push          작업 브랜치. PR 을 열기 전에도 검증을 받기 위함이다.
 #                 develop 은 넣지 않는다 — PR 에서 이미 검증한 코드를 머지 후 또 돌리지 않는다.
 on:
+  # main 릴리스에서는 release-main-dev.yml이 이 검증을 재사용한 뒤,
+  # 성공했을 때만 ECR publish를 호출한다.
+  workflow_call:
   pull_request:
     branches: [develop, main]
   push:
