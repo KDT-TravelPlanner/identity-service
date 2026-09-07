@@ -19,11 +19,9 @@ concurrency:
 jobs:
   publish:
     # travel-gitops SCRUM-125 Terraform output을 GitHub Environment dev에 등록한 뒤 실행된다.
-    if: >-
-      ${{ github.ref == 'refs/heads/develop' &&
-          vars.AWS_REGION != '' &&
-          vars.ECR_REPOSITORY_URL != '' &&
-          vars.AWS_ECR_PUBLISH_ROLE_ARN != '' }}
+    # 모놀리스와 동일하게 Environment 값을 job 안에서 사용한다. 값이 누락되면
+    # OIDC/ECR 단계가 명확히 실패하므로 설정 문제를 skip으로 숨기지 않는다.
+    if: github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: dev
