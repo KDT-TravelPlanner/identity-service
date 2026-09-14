@@ -31,9 +31,23 @@ jobs:
       packages: read
       id-token: write
 
+  # ECR에 올라간 immutable digest만 GitOps에 전달한다. 공용 workflow는
+  # GitHub App 토큰으로 travel-gitops PR을 만들며, 여기서 직접 배포하지 않는다.
+  update-gitops:
+    name: Create Identity GitOps PR
+    needs: publish
+    uses: KDT-TravelPlanner/travel-gitops/.github/workflows/update-gitops.yml@develop
+    secrets:
+      GITOPS_APP_ID: ${{ secrets.GITOPS_APP_ID }}
+      GITOPS_APP_PRIVATE_KEY: ${{ secrets.GITOPS_APP_PRIVATE_KEY }}
+    with:
+      service-name: identity
+      image-ref: ${{ needs.publish.outputs.image_ref }}
+      deployment-patch-path: k8s/overlays/dev-eks/workload/identity/deployment.patch.yaml
+
   release-summary:
     name: Release Summary
-    needs: [verify, publish]
+    needs: [verify, publish, update-gitops]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -41,6 +55,7 @@ jobs:
         env:
           VERIFY_RESULT: ${{ needs.verify.result }}
           PUBLISH_RESULT: ${{ needs.publish.result }}
+          GITOPS_RESULT: ${{ needs.update-gitops.result }}
           IMAGE_REF: ${{ needs.publish.outputs.image_ref }}
         run: |
           {
@@ -49,6 +64,7 @@ jobs:
             echo "|---|---|"
             echo "| Verification | ${VERIFY_RESULT} |"
             echo "| ECR image publish | ${PUBLISH_RESULT} |"
+            echo "| GitOps image update PR | ${GITOPS_RESULT} |"
             if [[ "${PUBLISH_RESULT}" == "success" ]]; then
               echo
               echo "Published image: \`${IMAGE_REF}\`"
